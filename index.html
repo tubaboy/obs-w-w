@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBS 天氣 Widget</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Fira+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-color: rgba(0, 0, 0, 1);
+            --text-color: #ffffff;
+            --accent-color: #3b82f6;
+            --secondary-text: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --glass-bg: rgba(255, 255, 255, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Fira Sans', "Microsoft JhengHei", sans-serif;
+            color: var(--text-color);
+            background-color: transparent; /* For OBS transparency */
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        body.preview-mode {
+            background-color: #0f172a;
+            overflow: auto;
+            align-items: flex-start;
+            padding: 2rem;
+        }
+
+        /* Widget Styles */
+        #widget {
+            background-color: var(--bg-color);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border-color);
+            display: none;
+            transition: opacity 0.3s ease;
+        }
+
+        #widget.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Layouts */
+        .format-square {
+            width: 400px;
+            height: 400px;
+            justify-content: space-between;
+        }
+
+        .format-rectangular {
+            width: 800px;
+            height: 300px;
+            flex-direction: row !important;
+            align-items: center;
+            gap: 24px;
+        }
+
+        /* Weather Info Elements */
+        .current-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .location-info h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .current-time {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            color: var(--secondary-text);
+        }
+
+        .main-weather {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .weather-icon-large {
+            width: 64px;
+            height: 64px;
+            stroke-width: 1.5;
+            color: var(--accent-color);
+        }
+
+        .temp-display {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .current-temp {
+            font-size: 3.5rem;
+            font-weight: 700;
+            line-height: 1;
+            font-family: 'Fira Code', monospace;
+        }
+
+        .weather-desc {
+            font-size: 1.1rem;
+            color: var(--secondary-text);
+        }
+
+        .details-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+            background: var(--glass-bg);
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .detail-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: var(--secondary-text);
+        }
+
+        .detail-item span {
+            color: var(--text-color);
+            font-family: 'Fira Code', monospace;
+        }
+
+        .forecast-container {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 5px;
+        }
+
+        .forecast-day {
+            flex: 1;
+            min-width: 70px;
+            background: var(--glass-bg);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .forecast-date {
+            font-size: 0.75rem;
+            color: var(--secondary-text);
+        }
+
+        .forecast-icon {
+            width: 24px;
+            height: 24px;
+            margin: 4px 0;
+        }
+
+        .forecast-temp {
+            font-size: 0.85rem;
+            font-weight: 600;
+            font-family: 'Fira Code', monospace;
+        }
+
+        .forecast-rain {
+            font-size: 0.7rem;
+            color: #60a5fa;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+
+        /* Preview UI */
+        #config-panel {
+            background: #1e293b;
+            padding: 2rem;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+            margin-right: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        h2 { margin-bottom: 1.5rem; color: #fff; }
+
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px 14px;
+            border-radius: 8px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #fff;
+            font-family: inherit;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .btn {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            width: 100%;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 1rem;
+            transition: filter 0.2s;
+        }
+
+        .btn:hover { filter: brightness(1.1); }
+
+        .result-url {
+            margin-top: 1.5rem;
+            padding: 12px;
+            background: #000;
+            border-radius: 8px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.8rem;
+            word-break: break-all;
+            border: 1px solid #334155;
+            position: relative;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            padding: 4px 8px;
+            font-size: 0.7rem;
+            background: #334155;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .preview-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .error-msg {
+            color: #ef4444;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* Rectangular adjustments */
+        .format-rectangular .details-grid {
+            grid-template-columns: repeat(1, 1fr);
+            margin-bottom: 0;
+        }
+        .format-rectangular .forecast-container {
+            flex: 1;
+            padding-bottom: 0;
+        }
+        .format-rectangular .main-content {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            flex: 1;
+        }
+
+        [data-lucide] {
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <!-- Config UI (only visible in preview mode) -->
+    <div id="preview-container" style="display: none; width: 100%; max-width: 1200px; display: flex;">
+        <div id="config-panel">
+            <h2>天氣 Widget 設定</h2>
+            <div class="form-group">
+                <label>城市名稱 (中文或英文)</label>
+                <input type="text" id="city-input" placeholder="例如: 台北市" value="台北市">
+            </div>
+            <div class="form-group">
+                <label>顯示標籤 (自訂文字)</label>
+                <input type="text" id="label-input" placeholder="自訂地點名稱">
+            </div>
+            <div class="form-group">
+                <label>預測天數</label>
+                <select id="days-input">
+                    <option value="3">3 日</option>
+                    <option value="5" selected>5 日</option>
+                    <option value="7">7 日</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>版型</label>
+                <select id="format-input">
+                    <option value="square">方形 (Square)</option>
+                    <option value="rectangular">長形 (Rectangular)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>背景透明度 (0-100)</label>
+                <input type="number" id="opacity-input" min="0" max="100" value="80">
+            </div>
+            <button class="btn" id="generate-btn">更新預覽並產生網址</button>
+            
+            <div class="result-url" id="url-display">
+                <span id="url-text"></span>
+                <div class="copy-btn" onclick="copyUrl()">複製</div>
+            </div>
+        </div>
+
+        <div class="preview-area">
+            <h3>即時預覽 (OBS 中縮放生效)</h3>
+            <div id="widget-preview-wrapper" style="transform-origin: top left;">
+                <!-- Widget will be rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- The Actual Widget -->
+    <div id="widget">
+        <div class="current-header">
+            <div class="location-info">
+                <h1 id="ui-label">--</h1>
+                <div class="current-time" id="ui-time">--:--</div>
+            </div>
+            <div class="weather-desc" id="ui-desc">--</div>
+        </div>
+
+        <div class="main-content">
+            <div class="main-weather">
+                <div id="ui-icon-large"></div>
+                <div class="temp-display">
+                    <div class="current-temp"><span id="ui-temp">--</span>°</div>
+                    <div class="detail-item">
+                        最高 <span id="ui-max">--</span>° / 最低 <span id="ui-min">--</span>°
+                    </div>
+                </div>
+            </div>
+
+            <div class="details-grid">
+                <div class="detail-item">
+                    <i data-lucide="thermometer" size="14"></i>
+                    體感 <span id="ui-feels">--</span>°
+                </div>
+                <div class="detail-item">
+                    <i data-lucide="droplets" size="14"></i>
+                    濕度 <span id="ui-humidity">--</span>%
+                </div>
+                <div class="detail-item">
+                    <i data-lucide="wind" size="14"></i>
+                    風速 <span id="ui-wind">--</span> km/h
+                </div>
+                <div class="detail-item">
+                    <i data-lucide="cloud-rain" size="14"></i>
+                    降雨 <span id="ui-rain">--</span> mm
+                </div>
+            </div>
+        </div>
+
+        <div class="forecast-container" id="ui-forecast">
+            <!-- Forecast items injected here -->
+        </div>
+    </div>
+
+    <script>
+        // Weather Code Mapping (WMO Code to Lucide Icon and Chinese Text)
+        const weatherMap = {
+            0: { icon: 'sun', text: '晴朗' },
+            1: { icon: 'sun', text: '晴時多雲' },
+            2: { icon: 'cloud-sun', text: '多雲' },
+            3: { icon: 'cloud', text: '陰天' },
+            45: { icon: 'cloud-fog', text: '霧' },
+            48: { icon: 'cloud-fog', text: '霧' },
+            51: { icon: 'cloud-drizzle', text: '微量細雨' },
+            53: { icon: 'cloud-drizzle', text: '小細雨' },
+            55: { icon: 'cloud-drizzle', text: '細雨' },
+            61: { icon: 'cloud-rain', text: '小雨' },
+            63: { icon: 'cloud-rain', text: '中雨' },
+            65: { icon: 'cloud-rain', text: '大雨' },
+            71: { icon: 'snowflake', text: '小雪' },
+            73: { icon: 'snowflake', text: '中雪' },
+            75: { icon: 'snowflake', text: '大雪' },
+            80: { icon: 'cloud-rain-wind', text: '陣雨' },
+            81: { icon: 'cloud-rain-wind', text: '強陣雨' },
+            82: { icon: 'cloud-rain-wind', text: '極端陣雨' },
+            95: { icon: 'cloud-lightning', text: '雷陣雨' },
+            96: { icon: 'cloud-lightning', text: '雷陣雨伴隨冰雹' },
+            99: { icon: 'cloud-lightning', text: '強烈雷陣雨伴隨冰雹' }
+        };
+
+        function getWeatherInfo(code) {
+            return weatherMap[code] || { icon: 'cloud', text: '未知' };
+        }
+
+        // Parse URL Parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const config = {
+            city: urlParams.get('city'),
+            lat: urlParams.get('lat'),
+            lon: urlParams.get('lon'),
+            label: urlParams.get('label'),
+            days: parseInt(urlParams.get('days')) || 5,
+            format: urlParams.get('format') || 'square',
+            opacity: urlParams.get('opacity') || '100'
+        };
+
+        const isWidgetMode = config.city || (config.lat && config.lon);
+
+        if (isWidgetMode) {
+            document.getElementById('preview-container').style.display = 'none';
+            initWidget();
+        } else {
+            document.body.classList.add('preview-mode');
+            document.getElementById('preview-container').style.display = 'flex';
+            setupPreview();
+        }
+
+        async function initWidget() {
+            const widget = document.getElementById('widget');
+            widget.className = `format-${config.format} active`;
+            widget.style.backgroundColor = `rgba(0, 0, 0, ${config.opacity / 100})`;
+            
+            updateTime();
+            setInterval(updateTime, 60000);
+
+            try {
+                let lat = config.lat, lon = config.lon;
+                
+                // If city is provided but not lat/lon, geocode first
+                if (config.city && (!lat || !lon)) {
+                    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(config.city)}&count=1&language=zh&format=json`);
+                    const geoData = await geoRes.json();
+                    if (geoData.results && geoData.results.length > 0) {
+                        lat = geoData.results[0].latitude;
+                        lon = geoData.results[0].longitude;
+                        if (!config.label) config.label = geoData.results[0].name;
+                    } else {
+                        throw new Error('City not found');
+                    }
+                }
+
+                document.getElementById('ui-label').textContent = config.label || config.city || '未知地點';
+
+                const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto&forecast_days=${config.days}`);
+                const data = await weatherRes.json();
+
+                renderWeatherData(data);
+                lucide.createIcons();
+            } catch (err) {
+                widget.innerHTML = '<div class="error-msg">暫無資料</div>';
+                console.error(err);
+            }
+        }
+
+        function renderWeatherData(data) {
+            const current = data.current;
+            const info = getWeatherInfo(current.weather_code);
+
+            document.getElementById('ui-desc').textContent = info.text;
+            document.getElementById('ui-temp').textContent = Math.round(current.temperature_2m);
+            document.getElementById('ui-max').textContent = Math.round(data.daily.temperature_2m_max[0]);
+            document.getElementById('ui-min').textContent = Math.round(data.daily.temperature_2m_min[0]);
+            document.getElementById('ui-feels').textContent = Math.round(current.apparent_temperature);
+            document.getElementById('ui-humidity').textContent = current.relative_humidity_2m;
+            document.getElementById('ui-wind').textContent = current.wind_speed_10m;
+            document.getElementById('ui-rain').textContent = current.precipitation;
+
+            const iconContainer = document.getElementById('ui-icon-large');
+            iconContainer.innerHTML = `<i data-lucide="${info.icon}" class="weather-icon-large"></i>`;
+
+            // Forecast
+            const forecastList = document.getElementById('ui-forecast');
+            forecastList.innerHTML = '';
+            
+            for (let i = 1; i < data.daily.time.length; i++) {
+                const date = new Date(data.daily.time[i]);
+                const dayLabel = (i === 1) ? '明天' : `${date.getMonth() + 1}/${date.getDate()}`;
+                const fInfo = getWeatherInfo(data.daily.weather_code[i]);
+                const rain = data.daily.precipitation_sum[i];
+
+                const dayEl = document.createElement('div');
+                dayEl.className = 'forecast-day';
+                dayEl.innerHTML = `
+                    <div class="forecast-date">${dayLabel}</div>
+                    <i data-lucide="${fInfo.icon}" class="forecast-icon"></i>
+                    <div class="forecast-temp">${Math.round(data.daily.temperature_2m_max[i])}°/${Math.round(data.daily.temperature_2m_min[i])}°</div>
+                    ${rain > 0 ? `<div class="forecast-rain"><i data-lucide="droplets" size="10"></i>${rain.toFixed(1)}</div>` : ''}
+                `;
+                forecastList.appendChild(dayEl);
+            }
+        }
+
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const dateStr = now.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric', weekday: 'short' });
+            document.getElementById('ui-time').textContent = `${dateStr} ${timeStr}`;
+        }
+
+        // Preview Page Logic
+        function setupPreview() {
+            const btn = document.getElementById('generate-btn');
+            const widgetWrapper = document.getElementById('widget-preview-wrapper');
+            const widget = document.getElementById('widget');
+            
+            // Move widget into preview wrapper for previewing
+            widgetWrapper.appendChild(widget);
+
+            function updatePreview() {
+                const city = document.getElementById('city-input').value;
+                const label = document.getElementById('label-input').value;
+                const days = document.getElementById('days-input').value;
+                const format = document.getElementById('format-input').value;
+                const opacity = document.getElementById('opacity-input').value;
+
+                // Update UI state
+                config.city = city;
+                config.label = label;
+                config.days = days;
+                config.format = format;
+                config.opacity = opacity;
+
+                initWidget();
+
+                // Generate URL
+                const baseUrl = window.location.origin + window.location.pathname;
+                const params = new URLSearchParams({
+                    city: city,
+                    label: label || city,
+                    days: days,
+                    format: format,
+                    opacity: opacity
+                });
+                const finalUrl = baseUrl + '?' + params.toString();
+                document.getElementById('url-text').textContent = finalUrl;
+            }
+
+            btn.addEventListener('click', updatePreview);
+            updatePreview(); // Initial preview
+        }
+
+        function copyUrl() {
+            const text = document.getElementById('url-text').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('網址已複製到剪貼簿！');
+            });
+        }
+    </script>
+</body>
+</html>
