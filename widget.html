@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>Weather Widget Overlay</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Fira+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-color: rgba(0, 0, 0, 1);
+            --text-color: #ffffff;
+            --accent-color: #3b82f6;
+            --secondary-text: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --glass-bg: rgba(255, 255, 255, 0.05);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Fira Sans', "Microsoft JhengHei", sans-serif;
+            color: var(--text-color);
+            background-color: transparent;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #widget {
+            background-color: var(--bg-color);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border-color);
+            display: none;
+            position: absolute;
+            top: 0; left: 0;
+        }
+
+        #widget.active { display: flex; }
+
+        /* --- Square Layout --- */
+        .format-square {
+            width: 400px;
+            flex-direction: column;
+            padding: 20px;
+            gap: 15px;
+        }
+        .format-square .widget-section { width: 100%; }
+        .format-square .details-grid { grid-template-columns: repeat(2, 1fr); }
+        .format-square .details-section { padding: 15px; background: var(--glass-bg); border-radius: 10px; }
+
+        /* --- Rectangular Layout --- */
+        .format-rectangular {
+            width: 900px;
+            height: 180px;
+            flex-direction: row;
+            padding: 0;
+        }
+        .format-rectangular .widget-section {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+            padding: 0 25px;
+        }
+        .format-rectangular .current-info-section { flex: 1.3; }
+        .format-rectangular .details-section { 
+            flex: 1; 
+            border-left: 1px solid var(--border-color);
+            border-right: 1px solid var(--border-color);
+            background: rgba(255,255,255,0.02);
+        }
+        .format-rectangular .forecast-section { flex: 2.5; padding-right: 15px; }
+        .format-rectangular .details-grid { grid-template-columns: 1fr; gap: 6px; padding: 0; background: transparent; }
+
+        /* Components */
+        .location-info h1 { font-size: 1.4rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .current-time { font-family: 'Fira Code', monospace; font-size: 0.8rem; color: var(--secondary-text); }
+        .main-weather { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+        .weather-icon-large { width: 56px; height: 56px; stroke-width: 1.5; color: var(--accent-color); }
+        .current-temp { font-size: 3rem; font-weight: 700; line-height: 1; font-family: 'Fira Code', monospace; }
+        .temp-range { font-size: 0.8rem; color: var(--secondary-text); margin-top: 4px; }
+        .header-meta { display: flex; justify-content: space-between; align-items: flex-end; width: 100%; }
+        .weather-desc { font-size: 0.9rem; font-weight: 600; color: var(--secondary-text); }
+        .update-time { font-size: 0.65rem; color: var(--secondary-text); opacity: 0.6; font-family: 'Fira Code', monospace; }
+
+        .details-grid { display: grid; gap: 8px; }
+        .detail-item { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--secondary-text); }
+        .detail-item span { color: var(--text-color); font-weight: 600; font-family: 'Fira Code', monospace; }
+
+        .forecast-container { display: flex; gap: 8px; width: 100%; }
+        .forecast-day {
+            flex: 1; min-width: 0; background: var(--glass-bg);
+            padding: 10px 4px; border-radius: 8px; text-align: center;
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+        }
+        .forecast-date { font-size: 0.7rem; color: var(--secondary-text); }
+        .forecast-icon { width: 22px; height: 22px; flex-shrink: 0; }
+        .forecast-temp { font-size: 0.8rem; font-weight: 600; font-family: 'Fira Code', monospace; }
+        .forecast-rain { font-size: 0.65rem; color: #60a5fa; font-weight: 500; }
+    </style>
+</head>
+<body>
+    <div id="widget">
+        <div class="widget-section current-info-section">
+            <div class="current-header">
+                <div class="location-info">
+                    <h1 id="ui-label">--</h1>
+                    <div class="current-time" id="ui-time">--:--</div>
+                </div>
+            </div>
+            <div class="main-weather">
+                <div id="ui-icon-large"></div>
+                <div class="temp-display">
+                    <div class="current-temp"><span id="ui-temp">--</span>°</div>
+                    <div class="header-meta">
+                        <div class="weather-desc" id="ui-desc">--</div>
+                        <div class="update-time" id="ui-update-time">--:--</div>
+                    </div>
+                    <div class="temp-range">↑ <span id="ui-max">--</span>°  ↓ <span id="ui-min">--</span>°</div>
+                </div>
+            </div>
+        </div>
+        <div class="widget-section details-section">
+            <div class="details-grid">
+                <div class="detail-item"><i data-lucide="thermometer" size="14"></i>體感 <span><span id="ui-feels">--</span>°</span></div>
+                <div class="detail-item"><i data-lucide="droplets" size="14"></i>濕度 <span><span id="ui-humidity">--</span>%</span></div>
+                <div class="detail-item"><i data-lucide="wind" size="14"></i>風速 <span><span id="ui-wind">--</span> km/h</span></div>
+                <div class="detail-item"><i data-lucide="cloud-rain" size="14"></i>降雨 <span><span id="ui-rain">--</span> mm</span></div>
+            </div>
+        </div>
+        <div class="widget-section forecast-section">
+            <div class="forecast-container" id="ui-forecast"></div>
+        </div>
+    </div>
+
+    <script>
+        const weatherMap = { 0: { icon: 'sun', text: '晴朗' }, 1: { icon: 'sun', text: '晴時多雲' }, 2: { icon: 'cloud-sun', text: '多雲' }, 3: { icon: 'cloud', text: '陰天' }, 45: { icon: 'cloud-fog', text: '霧' }, 51: { icon: 'cloud-drizzle', text: '細雨' }, 61: { icon: 'cloud-rain', text: '小雨' }, 63: { icon: 'cloud-rain', text: '中雨' }, 80: { icon: 'cloud-rain-wind', text: '陣雨' }, 95: { icon: 'cloud-lightning', text: '雷陣雨' } };
+        const getW = (c) => weatherMap[c] || { icon: 'cloud', text: '未知' };
+        
+        const params = new URLSearchParams(window.location.search);
+        const config = { 
+            lat: params.get('lat'), lon: params.get('lon'), city: params.get('city'), 
+            label: params.get('label'), days: parseInt(params.get('days')) || 5, 
+            format: params.get('format') || 'square', opacity: params.get('opacity') || 100 
+        };
+
+        if (config.lat && config.lon) {
+            init();
+        } else {
+            document.body.innerHTML = "<div style='color:white;padding:20px'>缺少座標參數 (lat/lon)</div>";
+        }
+
+        async function init() {
+            const w = document.getElementById('widget');
+            w.className = `format-${config.format} active`;
+            w.style.backgroundColor = `rgba(0,0,0,${config.opacity/100})`;
+            
+            updateTime();
+            setInterval(updateTime, 60000);
+            await fetchWeather();
+            setInterval(fetchWeather, 900000);
+        }
+
+        async function fetchWeather() {
+            try {
+                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${config.lat}&longitude=${config.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=${config.days + 1}`);
+                const data = await res.json();
+                
+                document.getElementById('ui-label').innerText = config.label || config.city || "未知地點";
+                document.getElementById('ui-desc').innerText = getW(data.current.weather_code).text;
+                document.getElementById('ui-temp').innerText = Math.round(data.current.temperature_2m);
+                document.getElementById('ui-max').innerText = Math.round(data.daily.temperature_2m_max[0]);
+                document.getElementById('ui-min').innerText = Math.round(data.daily.temperature_2m_min[0]);
+                document.getElementById('ui-feels').innerText = Math.round(data.current.apparent_temperature);
+                document.getElementById('ui-humidity').innerText = data.current.relative_humidity_2m;
+                document.getElementById('ui-wind').innerText = data.current.wind_speed_10m;
+                document.getElementById('ui-rain').innerText = data.current.precipitation;
+                document.getElementById('ui-icon-large').innerHTML = `<i data-lucide="${getW(data.current.weather_code).icon}" class="weather-icon-large"></i>`;
+                
+                const now = new Date();
+                document.getElementById('ui-update-time').innerText = `更新 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+
+                const forecast = document.getElementById('ui-forecast');
+                forecast.innerHTML = '';
+                for(let i=1; i<data.daily.time.length; i++) {
+                    const d = new Date(data.daily.time[i]);
+                    forecast.innerHTML += `<div class="forecast-day">
+                        <div class="forecast-date">${d.getMonth()+1}/${d.getDate()}</div>
+                        <i data-lucide="${getW(data.daily.weather_code[i]).icon}" class="forecast-icon"></i>
+                        <div class="forecast-temp">${Math.round(data.daily.temperature_2m_max[i])}°</div>
+                        <div class="forecast-rain">${data.daily.precipitation_probability_max[i]}%</div>
+                    </div>`;
+                }
+                lucide.createIcons();
+            } catch (e) { console.error(e); }
+        }
+
+        function updateTime() {
+            const n = new Date();
+            document.getElementById('ui-time').innerText = n.toLocaleDateString('zh-TW', {month:'short', day:'numeric', weekday:'short'}) + ' ' + n.toLocaleTimeString('zh-TW', {hour12:false, hour:'2-digit', minute:'2-digit'});
+        }
+    </script>
+</body>
+</html>
