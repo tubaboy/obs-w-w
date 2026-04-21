@@ -304,6 +304,8 @@
             opacity: params.get('opacity') || 100 
         };
 
+        let weatherTimer, timeTimer;
+
         if (!config.city && !config.lat) {
             document.body.classList.add('preview-mode');
             document.getElementById('preview-container').style.display = 'flex';
@@ -313,8 +315,7 @@
             
             // Default to Taipei
             config.city = "台北市";
-            config.lat = 25.0372;
-            config.lon = 121.5637;
+            config.lat = 25.0372; config.lon = 121.5637;
             document.getElementById('city-input').value = config.city;
             updatePreview();
         } else {
@@ -325,19 +326,27 @@
             const w = document.getElementById('widget');
             w.className = `format-${config.format} active`;
             w.style.backgroundColor = `rgba(0,0,0,${config.opacity/100})`;
+            
+            // Setup Timers
+            clearInterval(timeTimer);
             updateTime();
-            setInterval(updateTime, 60000);
+            timeTimer = setInterval(updateTime, 60000);
 
+            clearInterval(weatherTimer);
+            await fetchWeatherOnly();
+            weatherTimer = setInterval(fetchWeatherOnly, 900000); // Update weather every 15 mins
+        }
+
+        async function fetchWeatherOnly() {
             try {
                 let lat = config.lat, lon = config.lon;
-                
                 if (!lat || !lon) {
                     const gRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(config.city)}&count=1&language=zh`);
                     const gData = await gRes.json();
                     if (gData.results) {
                         lat = gData.results[0].latitude;
                         lon = gData.results[0].longitude;
-                        if (!config.label) config.label = gData.results[0].name;
+                        config.lat = lat; config.lon = lon;
                     } else throw new Error();
                 }
 
@@ -346,7 +355,7 @@
                 const data = await res.json();
                 render(data);
                 lucide.createIcons();
-            } catch (e) { w.innerHTML = '<div style="color:red;padding:20px">暫無資料</div>'; }
+            } catch (e) { console.error("Weather fetch failed", e); }
         }
 
         function render(data) {
@@ -381,7 +390,6 @@
             const input = document.getElementById('city-input');
             const results = document.getElementById('search-results');
             let timer;
-
             input.oninput = () => {
                 clearTimeout(timer);
                 if (!input.value) { results.style.display = 'none'; return; }
