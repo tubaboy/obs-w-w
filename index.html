@@ -203,9 +203,35 @@
             margin-right: 2rem;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        .form-group { margin-bottom: 1.2rem; }
+        .form-group { margin-bottom: 1.2rem; position: relative; }
         label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: #94a3b8; }
         input, select { width: 100%; padding: 10px; border-radius: 8px; background: #0f172a; border: 1px solid #334155; color: #fff; }
+        
+        /* Search Suggestions */
+        #search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            margin-top: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        .search-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #334155;
+            font-size: 0.85rem;
+        }
+        .search-item:hover { background: #334155; }
+        .search-item .item-sub { font-size: 0.75rem; color: #94a3b8; }
+
         .btn { background: var(--accent-color); color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: 600; cursor: pointer; margin-top: 1rem; }
         .result-url { margin-top: 1.5rem; padding: 12px; background: #000; border-radius: 8px; font-family: 'Fira Code', monospace; font-size: 0.75rem; word-break: break-all; border: 1px solid #334155; position: relative; }
         .copy-btn { position: absolute; top: 5px; right: 5px; padding: 4px 8px; font-size: 0.7rem; background: #334155; border-radius: 4px; cursor: pointer; }
@@ -215,7 +241,11 @@
     <div id="preview-container" style="display: none; width: 100%; max-width: 1300px; display: flex;">
         <div id="config-panel">
             <h2>天氣 Widget 設定</h2>
-            <div class="form-group"><label>城市名稱</label><input type="text" id="city-input" value="台北市"></div>
+            <div class="form-group">
+                <label>城市搜尋</label>
+                <input type="text" id="city-input" placeholder="輸入城市名稱 (例如: 台北)" autocomplete="off">
+                <div id="search-results"></div>
+            </div>
             <div class="form-group"><label>顯示標籤 (自訂文字)</label><input type="text" id="label-input"></div>
             <div class="form-group"><label>預測天數</label><select id="days-input"><option value="3">3 日</option><option value="5" selected>5 日</option><option value="7">7 日</option></select></div>
             <div class="form-group"><label>版型</label><select id="format-input"><option value="square">方形 (Square)</option><option value="rectangular">長形 (Rectangular)</option></select></div>
@@ -264,13 +294,28 @@
         const getW = (c) => weatherMap[c] || { icon: 'cloud', text: '未知' };
         
         const params = new URLSearchParams(window.location.search);
-        const config = { city: params.get('city'), label: params.get('label'), days: parseInt(params.get('days')) || 5, format: params.get('format') || 'square', opacity: params.get('opacity') || 100 };
+        let config = { 
+            lat: params.get('lat'), 
+            lon: params.get('lon'), 
+            city: params.get('city'), 
+            label: params.get('label'), 
+            days: parseInt(params.get('days')) || 5, 
+            format: params.get('format') || 'square', 
+            opacity: params.get('opacity') || 100 
+        };
 
-        if (!config.city) {
+        if (!config.city && !config.lat) {
             document.body.classList.add('preview-mode');
             document.getElementById('preview-container').style.display = 'flex';
             document.getElementById('widget-preview-wrapper').appendChild(document.getElementById('widget'));
+            setupSearch();
             document.getElementById('generate-btn').onclick = updatePreview;
+            
+            // Default to Taipei
+            config.city = "台北市";
+            config.lat = 25.0372;
+            config.lon = 121.5637;
+            document.getElementById('city-input').value = config.city;
             updatePreview();
         } else {
             init();
@@ -282,12 +327,22 @@
             w.style.backgroundColor = `rgba(0,0,0,${config.opacity/100})`;
             updateTime();
             setInterval(updateTime, 60000);
+
             try {
-                const gRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(config.city)}&count=1&language=zh`);
-                const gData = await gRes.json();
-                const loc = gData.results[0];
-                document.getElementById('ui-label').innerText = config.label || loc.name;
-                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=auto&forecast_days=${config.days + 1}`);
+                let lat = config.lat, lon = config.lon;
+                
+                if (!lat || !lon) {
+                    const gRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(config.city)}&count=1&language=zh`);
+                    const gData = await gRes.json();
+                    if (gData.results) {
+                        lat = gData.results[0].latitude;
+                        lon = gData.results[0].longitude;
+                        if (!config.label) config.label = gData.results[0].name;
+                    } else throw new Error();
+                }
+
+                document.getElementById('ui-label').innerText = config.label || config.city || "未知地點";
+                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=auto&forecast_days=${config.days + 1}`);
                 const data = await res.json();
                 render(data);
                 lucide.createIcons();
@@ -317,10 +372,41 @@
                         <div class="forecast-date">${d.getMonth()+1}/${d.getDate()}</div>
                         <i data-lucide="${fInfo.icon}" class="forecast-icon"></i>
                         <div class="forecast-temp">${Math.round(data.daily.temperature_2m_max[i])}°</div>
-                        ${rainProb > 0 ? `<div class="forecast-rain"><i data-lucide="droplets" size="10"></i>${rainProb}%</div>` : '<div style="height:12px"></div>'}
+                        <div class="forecast-rain"><i data-lucide="droplets" size="10"></i>${rainProb}%</div>
                     </div>`;
             }
         }
+
+        function setupSearch() {
+            const input = document.getElementById('city-input');
+            const results = document.getElementById('search-results');
+            let timer;
+
+            input.oninput = () => {
+                clearTimeout(timer);
+                if (!input.value) { results.style.display = 'none'; return; }
+                timer = setTimeout(async () => {
+                    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(input.value)}&count=5&language=zh`);
+                    const data = await res.json();
+                    if (data.results) {
+                        results.innerHTML = data.results.map(loc => `
+                            <div class="search-item" onclick="selectLoc(${loc.latitude}, ${loc.longitude}, '${loc.name}', '${loc.admin1 || ''}, ${loc.country}')">
+                                <div>${loc.name}</div>
+                                <div class="item-sub">${loc.admin1 || ''} ${loc.country}</div>
+                            </div>
+                        `).join('');
+                        results.style.display = 'block';
+                    }
+                }, 300);
+            };
+        }
+
+        window.selectLoc = (lat, lon, name, sub) => {
+            config.lat = lat; config.lon = lon; config.city = name;
+            document.getElementById('city-input').value = name;
+            document.getElementById('search-results').style.display = 'none';
+            init();
+        };
 
         function updateTime() {
             const n = new Date();
@@ -328,15 +414,14 @@
         }
 
         function updatePreview() {
-            config.city = document.getElementById('city-input').value;
             config.label = document.getElementById('label-input').value;
             config.days = parseInt(document.getElementById('days-input').value);
             config.format = document.getElementById('format-input').value;
             config.opacity = document.getElementById('opacity-input').value;
             init();
             const baseUrl = window.location.origin + window.location.pathname;
-            const finalUrl = baseUrl + '?' + new URLSearchParams({city:config.city, label:config.label||config.city, days:config.days, format:config.format, opacity:config.opacity}).toString();
-            document.getElementById('url-text').innerText = finalUrl;
+            const q = new URLSearchParams({lat:config.lat, lon:config.lon, city:config.city, label:config.label||config.city, days:config.days, format:config.format, opacity:config.opacity}).toString();
+            document.getElementById('url-text').innerText = baseUrl + '?' + q;
         }
 
         function copyUrl() { navigator.clipboard.writeText(document.getElementById('url-text').innerText).then(() => alert('網址已複製！')); }
