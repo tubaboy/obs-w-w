@@ -59,22 +59,26 @@
         /* --- Square Layout --- */
         .format-square {
             width: 400px;
-            min-height: 480px;
             flex-direction: column !important;
-            gap: 15px;
+            gap: 12px;
+            padding: 15px !important;
+            height: auto !important;
+            min-height: 0 !important;
         }
-        .format-square .widget-section { width: 100%; }
-        .format-square .details-grid { grid-template-columns: repeat(2, 1fr); }
+        .format-square .widget-section { width: 100%; padding: 0 !important; }
+        .format-square .details-grid { grid-template-columns: repeat(2, 1fr); margin-bottom: 5px; }
+        .format-square .main-weather { margin-bottom: 10px; }
 
         /* --- Rectangular Layout --- */
         .format-rectangular {
             width: 900px;
-            height: 220px;
+            height: 170px;
             flex-direction: row !important;
             align-items: stretch;
             padding: 0 !important;
             gap: 0 !important;
         }
+
         .format-rectangular .widget-section {
             display: flex;
             flex-direction: column;
@@ -268,7 +272,7 @@
                 const gData = await gRes.json();
                 const loc = gData.results[0];
                 document.getElementById('ui-label').innerText = config.label || loc.name;
-                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto&forecast_days=${config.days + 1}`);
+                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=auto&forecast_days=${config.days + 1}`);
                 const data = await res.json();
                 render(data);
                 lucide.createIcons();
@@ -292,7 +296,14 @@
             for(let i=1; i<data.daily.time.length; i++) {
                 const d = new Date(data.daily.time[i]);
                 const fInfo = getW(data.daily.weather_code[i]);
-                forecast.innerHTML += `<div class="forecast-day"><div class="forecast-date">${d.getMonth()+1}/${d.getDate()}</div><i data-lucide="${fInfo.icon}" class="forecast-icon"></i><div class="forecast-temp">${Math.round(data.daily.temperature_2m_max[i])}°</div></div>`;
+                const rainProb = data.daily.precipitation_probability_max[i];
+                forecast.innerHTML += `
+                    <div class="forecast-day">
+                        <div class="forecast-date">${d.getMonth()+1}/${d.getDate()}</div>
+                        <i data-lucide="${fInfo.icon}" class="forecast-icon"></i>
+                        <div class="forecast-temp">${Math.round(data.daily.temperature_2m_max[i])}°</div>
+                        ${rainProb > 0 ? `<div class="forecast-rain"><i data-lucide="droplets" size="10"></i>${rainProb}%</div>` : '<div style="height:12px"></div>'}
+                    </div>`;
             }
         }
 
